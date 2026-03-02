@@ -1,0 +1,104 @@
+{
+  "expo": {
+    "name": "XBRecipeWriter+",
+    "slug": "XBRecipeWriterPlus",
+    "version": "2.2.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "myapp",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.moss.XBRecipeWriterPlus"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      },
+      "permissions": [
+        "android.permission.NFC"
+      ],
+      "package": "com.moss.XBRecipeWriterPlus"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "useLegacyPackaging": true,
+            "kotlinVersion": "2.0.21"
+          }
+        }
+      ],
+      "expo-router",
+      [
+        "react-native-nfc-manager",
+        {
+          "includeNdefEntitlement": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#000000",
+          "image": "./assets/images/icon.png",
+          "dark": {
+            "image": "./assets/images/icon.png",
+            "backgroundColor": "#000000"
+          },
+          "imageWidth": 200
+        }
+      ],
+      "expo-share-intent",
+      "expo-font",
+      "expo-sqlite"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d45316be-8636-47a9-afb4-7c82b069bb58",
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "ShareExtension",
+                  "bundleIdentifier": "com.moss.XBRecipeWriterPlus.share-extension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.moss.XBRecipeWriterPlus"
+                    ]
+                  }
+                },
+                {
+                  "targetName": "ShareExtension",
+                  "bundleIdentifier": "com.moss.XBRecipeWriterPlus.share-extension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.moss.XBRecipeWriterPlus"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "router": {}
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "owner": "expomoss"
+  }
+}

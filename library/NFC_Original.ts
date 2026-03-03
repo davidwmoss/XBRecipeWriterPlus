@@ -12,9 +12,6 @@ type NfcSystemInfo = {
     dsfid: number;
 };
 
-// Small async sleep helper (improves iOS ISO15693 reliability in practice)
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
 class NFC {
     private isClosed = true;
 
@@ -29,35 +26,24 @@ class NFC {
         }
     }
 
-    private getReadFlags(): number {
-        // iOS CoreNFC ISO15693 is often more reliable with 0x02 (high data rate, not explicitly addressed)
-        // Android path includes UID in the command and typically expects addressed mode (0x22).
-        return Platform.OS === 'ios' ? 0x02 : 0x22;
-    }
-
     async readHash(): Promise<number[] | null> {
-        return this.readMultipleBlocks(this.getReadFlags(), 0, 8);
+        return this.readMultipleBlocks(34, 0, 8);
     }
 
     public getIsClosed() {
         return this.isClosed;
     }
 
+
     async close() {
-        // Make close idempotent and resilient to "no tech request available" errors
-        await NfcManager.cancelTechnologyRequest().catch(() => {});
+        await NfcManager.cancelTechnologyRequest();
         this.isClosed = true;
     }
 
     async open() {
-        // Always clear any prior session; stuck sessions are a common cause of intermittent iOS reads
-        await NfcManager.cancelTechnologyRequest().catch(() => {});
-
         if (Platform.OS === 'ios') {
             console.log("Requesting Iso15693");
             await NfcManager.requestTechnology(NfcTech.Iso15693IOS);
-            // Give CoreNFC a moment to stabilize before sending commands
-            await sleep(150);
         } else {
             console.log("Requesting NfcV");
             await NfcManager.requestTechnology(NfcTech.NfcV);
@@ -72,15 +58,16 @@ class NFC {
                 .split(/(..)/g)
                 .filter(s => s);
             let tagArray: number[] = [];
-            idBytes.forEach((val) => tagArray.push(parseInt(val, 16)));
+            idBytes.forEach((val, i, a) => tagArray.push(parseInt(val, 16)));
             return tagArray;
         }
         return null;
     }
 
+
     async getSystemInfo(): Promise<NfcSystemInfo | null> {
         if (Platform.OS === 'ios') {
-            return await NfcManager.iso15693HandlerIOS.getSystemInfo(this.getReadFlags());
+            return await NfcManager.iso15693HandlerIOS.getSystemInfo(34);
         } else {
             let uid = await this.getUID();
 
@@ -95,54 +82,65 @@ class NFC {
 
                 return sysInfo;
             }
+            //return await NfcManager.nfcVHandler.transceive([0x22, 0x2B,...idBytes,0]);
         }
         return null;
+
     }
 
-    async readSingleBlock(flags: number, blockNumber: number): Promise<number[] | null> {
-        if (Platform.OS === 'ios') {
-            const data = await NfcManager.iso15693HandlerIOS.readSingleBlock({
-                flags,
-                blockNumber,
-            });
-            return data ?? null;
-        } else {
-            const uid = await this.getUID();
-            if (uid && uid.length > 0) {
-                const resp: number[] = await NfcManager.nfcVHandler.transceive([flags, 0x20, ...uid, blockNumber]);
-                if (!resp?.length || resp[0] !== 0x00) {
-                    throw new Error(`Read failed at block ${blockNumber} (status 0x${resp?.[0]?.toString(16) ?? '??'})`);
-                }
-                return resp.slice(1);
-            }
-        }
-        return null;
-    }
 
     async readMultipleBlocks(flags: number, blockNumber: number, blockCount: number): Promise<number[] | null> {
-        console.log("Reading blocks via single-block loop");
-        console.log("Flags:" + flags);
-        console.log("BlockNumber:" + blockNumber);
-        console.log("BlockCount:" + blockCount);
-
-        const data: number[] = [];
-
-        for (let i = 0; i < blockCount; i++) {
-            const bn = blockNumber + i;
-            const block = await this.readSingleBlock(flags, bn);
-            if (block === null) {
-                throw new Error(`Read failed at block ${bn}: null response`);
+        if (Platform.OS === 'ios') {
+            let data = await NfcManager.iso15693HandlerIOS.readMultipleBlocks({
+                flags:      flags,
+                blockNumber: blockNumber,
+                blockCount: blockCount
+            });
+            let flattenedData: number[] = []
+            if (data) {
+                for (let i = 0; i < data.length; i++) {
+                    for (let j = 0; j < data[i].length; j++) {
+                        flattenedData[(i * 4) + j] = data[i][j] //@TODO this 4 should be set to block size
+                    }
+                }
+                console.log(JSON.stringify(flattenedData));
+                return flattenedData;
             }
-            data.push(...block);
+        } else {
+            let uid = await this.getUID();
+            if (uid && uid.length > 0) {
+                console.log("Reading Multiple Blocks");
+                console.log("Flags:" + flags);
+                console.log("UID:" + Recipe.convertNumberArrayToHex(uid));
+                console.log("BlockNumber:" + blockNumber);
+                console.log("BlockCount:" + blockCount);
 
-            // Throttle slightly on iOS to reduce intermittent failures during long reads
-            if (Platform.OS === 'ios') {
-                await sleep(25);
+                let resp: number[] = await NfcManager.nfcVHandler.transceive([flags, 0x23, ...uid, blockNumber, blockCount - 1]);
+
+                if (resp && resp.length && resp.length > 0 && resp[0] == 0) {
+                    resp.splice(0, 1);
+                    console.log(Recipe.convertNumberArrayToHex(resp));
+                    return resp;
+                } else {
+                    console.log("Fallback: card doesn't support 0x23 (READ MULTIPLE BLOCKS), using 0x20 (READ SINGLE BLOCK) in a loop...");
+                    // ---------- fallback: READ SINGLE BLOCK (0x20) in a loop ----------
+                    const data: number[] = [];
+                    for (let i = 0; i < blockCount; i++) {
+                        const bn = blockNumber + i;
+                        const singleCmd = [flags, 0x20, ...uid, bn];   // 0x20 = Read Single Block
+                        let resp: number[] = await NfcManager.nfcVHandler.transceive(singleCmd);
+
+                        if (!resp?.length || resp[0] !== 0x00) {
+                            throw new Error(`Read failed at block ${bn} (status 0x${resp?.[0]?.toString(16) ?? '??'})`);
+                        }
+                        data.push(...resp.slice(1));  // append block payload
+                    }
+                    console.log(Recipe.convertNumberArrayToHex(data));
+                    return data;
+                }
             }
         }
-
-        console.log(Recipe.convertNumberArrayToHex(data));
-        return data;
+        return null;
     }
 
     async readCard(progressCallBack: (progress: number, id?: string) => Promise<string | undefined>): Promise<number[] | null> {
@@ -154,10 +152,10 @@ class NFC {
             await progressCallBack(50);
             console.log(nfcTag);
             if (nfcTag && sysInfo) {
-                const data = await this.readMultipleBlocks(this.getReadFlags(), 0, sysInfo.blockCount);
+                const data = await this.readMultipleBlocks(34, 0, sysInfo.blockCount);
                 await progressCallBack(80);
                 if (data) {
-                    return data;
+                    return data
                 }
             }
             return null;
@@ -172,17 +170,14 @@ class NFC {
     async writeSingleBlock(flags: number, blockNumber: number, dataBlock: number[]): Promise<void> {
         if (Platform.OS === 'ios') {
             await NfcManager.iso15693HandlerIOS.writeSingleBlock({
-                flags,
-                blockNumber,
-                dataBlock,
-            });
+                flags:     flags,
+                blockNumber: blockNumber,
+                dataBlock: dataBlock
+            })
         } else {
-            const uid = await this.getUID();
+            let uid = await this.getUID();
             if (uid && uid.length > 0) {
-                const resp: number[] = await NfcManager.nfcVHandler.transceive([flags, 0x21, ...uid, blockNumber, ...dataBlock]);
-                if (!resp?.length || resp[0] !== 0x00) {
-                    throw new Error(`Write failed at block ${blockNumber} (status 0x${resp?.[0]?.toString(16) ?? '??'})`);
-                }
+                let resp: number[] = await NfcManager.nfcVHandler.transceive([flags, 0x21, ...uid, blockNumber, ...dataBlock]);
             }
         }
     }
@@ -196,17 +191,19 @@ class NFC {
             if (id || Platform.OS !== "ios") {
 
                 while (i < data.length) {
-                    const fourByteData = data.slice(i, i + 4);
+
+                    let fourByteData = data.slice(i, i + 4);
                     console.log(JSON.stringify(fourByteData));
                     console.log("Blocknum:" + blockNum);
 
-                    await this.writeSingleBlock(this.getReadFlags(), blockNum, fourByteData);
+                    await this.writeSingleBlock(34, blockNum, fourByteData)
+
                     await progressCallBack(Math.round((i / data.length) * 100), id);
 
                     i += 4;
                     blockNum++;
-                }
 
+                }
                 await progressCallBack(100, id);
             }
 
@@ -218,20 +215,24 @@ class NFC {
             }
             throw e;
         }
+
     }
 
     async writeCard(data: number[], progressCallBack: (progress: number, id?: string) => Promise<string | undefined>) {
+        //await NfcManager.requestTechnology(NfcTech.Iso15693IOS);
         try {
             let info = await this.getSystemInfo();
             if (info) {
                 let totalBlocks = info.blockCount * info.blockSize;
-                let availableRecipeBlocks = totalBlocks - 32; // accounts for 32 byte hash
+                let availableRecipeBlocks = totalBlocks - 32; //accounts for 32 byte hash
                 console.log("CardInfo:" + JSON.stringify(info));
                 console.log("Total Blocks:" + totalBlocks);
                 if (data.length < availableRecipeBlocks) {
                     const padding = new Array(availableRecipeBlocks - data.length).fill(0);
                     data = data.concat(padding);
                 }
+                // the resolved tag object will contain `ndefMessage` property
+                //const nfcTag = await NfcManager.getTag();
                 await this.writeBlocks(8, data, progressCallBack);
             }
         } catch (e) {

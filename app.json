@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.moss.XBRecipeWriterPlus"
+      "bundleIdentifier": "com.moss.XBRecipeWriterPlus",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -17,6 +20,7 @@
         "backgroundColor": "#000000"
       },
       "permissions": [
+        "android.permission.NFC",
         "android.permission.NFC"
       ],
       "package": "com.moss.XBRecipeWriterPlus"
@@ -65,40 +69,17 @@
       "typedRoutes": true
     },
     "extra": {
-      "eas": {
-        "projectId": "d45316be-8636-47a9-afb4-7c82b069bb58",
-        "build": {
-          "experimental": {
-            "ios": {
-              "appExtensions": [
-                {
-                  "targetName": "ShareExtension",
-                  "bundleIdentifier": "com.moss.XBRecipeWriterPlus.share-extension",
-                  "entitlements": {
-                    "com.apple.security.application-groups": [
-                      "group.com.moss.XBRecipeWriterPlus"
-                    ]
-                  }
-                },
-                {
-                  "targetName": "ShareExtension",
-                  "bundleIdentifier": "com.moss.XBRecipeWriterPlus.share-extension",
-                  "entitlements": {
-                    "com.apple.security.application-groups": [
-                      "group.com.moss.XBRecipeWriterPlus"
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        }
-      },
-      "router": {}
-    },
+  "eas": {
+    "projectId": "d45316be-8636-47a9-afb4-7c82b069bb58"
+  },
+  "router": {}
+},
     "runtimeVersion": {
       "policy": "appVersion"
     },
-    "owner": "expomoss"
+    "owner": "expomoss",
+    "updates": {
+      "url": "https://u.expo.dev/d45316be-8636-47a9-afb4-7c82b069bb58"
+    }
   }
 }

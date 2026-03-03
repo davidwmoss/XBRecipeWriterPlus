@@ -52,7 +52,8 @@
     "react-native-svg": "~15.12.1",
     "react-native-swipeable-list": "~0.1.2",
     "react-native-uuid": "~2.0.3",
-    "tamagui": "1.132.23"
+    "tamagui": "1.132.23",
+    "expo-updates": "~0.28.18"
   },
   "devDependencies": {
     "@babel/core": "^7.28.3",
